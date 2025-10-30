@@ -1,5 +1,5 @@
 api_key:
-  openrouter: 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
+  openrouter: <Input Your Own AK>
 
 
 model:
@@ -16,7 +16,8 @@ window_size: 3
 num_threads: 32
 num_samples: 5
 
-# 消融实验配置
-enable_similarity_examples: true  # 是否启用相似样本
-enable_few_shot_examples: true    # 是否启用few-shot示例
-enable_handshake_results: true    # 是否启用handshake结果
+enable_similarity_examples: true 
+
+enable_few_shot_examples: true 
+
+enable_handshake_results: true 
