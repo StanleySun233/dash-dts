@@ -1,0 +1,9 @@
+flask
+openai
+numpy==1.26.4
+tqdm
+sentence-transformers
+transformers==4.41.0
+tokenizers==0.19.1
+PyYAML
+tiktoken

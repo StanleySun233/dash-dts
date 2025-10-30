@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Dialogue Topic Segmentation</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+</head>
+<body>
+<div class="container-fluid h-100">
+    <div class="row h-100">
+        <!-- 左侧对话列表 -->
+        <div class="col-md-3 bg-light border-end">
+            <div class="p-3">
+                <h4 class="mb-3">
+                    <i class="bi bi-chat-dots"></i>
+                    Dialogue List
+                </h4>
+                <div class="list-group" id="dialogue-list">
+                    <!-- 对话列表将在这里动态加载 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧主要内容 -->
+        <div class="col-md-9">
+            <div class="p-3">
+                <!-- 指标卡片区域 -->
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="card metric-card pk-card">
+                            <div class="card-body text-center">
+                                <div class="metric-content">
+                                    <span class="metric-label">PK：</span>
+                                    <span class="metric-value" id="pk-value">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card metric-card wd-card">
+                            <div class="card-body text-center">
+                                <div class="metric-content">
+                                    <span class="metric-label">WD：</span>
+                                    <span class="metric-value" id="wd-value">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card metric-card f1-card">
+                            <div class="card-body text-center">
+                                <div class="metric-content">
+                                    <span class="metric-label">F1：</span>
+                                    <span class="metric-value" id="f1-value">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 控制面板 -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title mb-3">
+                                    <i class="bi bi-gear"></i>
+                                    Control Panel
+                                </h5>
+                                <div class="row align-items-center">
+                                    <div class="col-md-6">
+                                        <div class="form-check form-check-inline">
+                                            <input checked class="form-check-input" id="handshake-check"
+                                                   type="checkbox">
+                                            <label class="form-check-label" for="handshake-check">
+                                                <i class="bi bi-handshake"></i> Handshake
+                                            </label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input checked class="form-check-input" id="posneg-check" type="checkbox">
+                                            <label class="form-check-label" for="posneg-check">
+                                                <i class="bi bi-plus-minus"></i> Pos&Neg
+                                            </label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input checked class="form-check-input" id="similarity-check"
+                                                   type="checkbox">
+                                            <label class="form-check-label" for="similarity-check">
+                                                <i class="bi bi-diagram-3"></i> DialSim
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 text-end">
+                                        <button class="btn btn-primary me-2" id="segment-btn" type="button">
+                                            <i class="bi bi-scissors"></i>
+                                            Segment Dialogue
+                                        </button>
+                                        <button class="btn btn-warning" disabled id="reassess-btn" type="button">
+                                            <i class="bi bi-arrow-clockwise"></i>
+                                            Reassess
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 对话显示表格 -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-table"></i>
+                                    Segmentation Results
+                                </h5>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-striped table-hover mb-0">
+                                        <thead class="table-dark">
+                                        <tr>
+                                            <th style="width: 50%">Dialogue Text</th>
+                                            <th style="width: 12.5%">Reference</th>
+                                            <th style="width: 12.5%">Prediction</th>
+                                            <th style="width: 12.5%">Reassess</th>
+                                            <th style="width: 12.5%">Status</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody id="dialogue-table">
+                                        <tr>
+                                            <td class="text-center text-muted py-5" colspan="5">
+                                                <i class="bi bi-chat-square-text fs-1"></i>
+                                                <br>
+                                                Please select a dialogue from the left to begin
+                                            </td>
+                                        </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- 错误提示模态框 -->
+<div class="modal fade" id="errorModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Error
+                </h5>
+                <button class="btn-close btn-close-white" data-bs-dismiss="modal" type="button"></button>
+            </div>
+            <div class="modal-body">
+                <p id="error-message">An unknown error occurred</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal" type="button">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bootstrap 5 JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Custom JS -->
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
