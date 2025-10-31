@@ -1,7 +1,6 @@
-from typing import List, Tuple
+from sklearn.metrics import f1_score, precision_score, recall_score
 
-
-def compute_pk(reference: List[int], hypothesis: List[int], k: int = None) -> float:
+def compute_pk(reference, hypothesis, k: int = None) -> float:
     n = len(reference)
     if k is None:
         k = max(1, n // 2)
@@ -21,7 +20,7 @@ def compute_pk(reference: List[int], hypothesis: List[int], k: int = None) -> fl
     return pk_sum / (n - k + 1)
 
 
-def compute_wd(reference: List[int], hypothesis: List[int]) -> float:
+def compute_wd(reference, hypothesis) -> float:
     n = len(reference)
     wd_sum = 0.0
 
@@ -32,38 +31,20 @@ def compute_wd(reference: List[int], hypothesis: List[int]) -> float:
     return wd_sum / n
 
 
-def compute_segmentation_f1(reference: List[int], hypothesis: List[int],
+def compute_segmentation_f1(reference, hypothesis,
                             window_tolerance: int = 1) -> Tuple[float, float, float]:
-    n = len(reference)
-
-    # Get true segment positions
-    true_segments = [i for i, val in enumerate(reference) if val == 1]
-    # Get predicted segment positions
-    pred_segments = [i for i, val in enumerate(hypothesis) if val == 1]
-
-    # Calculate matched segments
-    matched_true = set()
-    matched_pred = set()
-
-    for i, true_pos in enumerate(true_segments):
-        for j, pred_pos in enumerate(pred_segments):
-            if abs(true_pos - pred_pos) <= window_tolerance:
-                matched_true.add(i)
-                matched_pred.add(j)
-
-    # Calculate metrics
-    tp = len(matched_true)
-    fp = len(pred_segments) - len(matched_pred)
-    fn = len(true_segments) - len(matched_true)
-
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
-
+    # Ensure both sequences have the same length
+    min_length = min(len(reference), len(hypothesis))
+    ref_seq = reference[:min_length]
+    hyp_seq = hypothesis[:min_length]
+    precision = precision_score(ref_seq, hyp_seq, pos_label=1, zero_division=0)
+    recall = recall_score(ref_seq, hyp_seq, pos_label=1, zero_division=0)
+    f1 = f1_score(ref_seq, hyp_seq, pos_label=1, zero_division=0)
+    
     return precision, recall, f1
 
 
-def evaluate_segmentation(reference: List[int], hypothesis: List[int]) -> dict:
+def evaluate_segmentation(reference, hypothesis) -> dict:
     # Calculate PK
     pk = compute_pk(reference, hypothesis)
 
