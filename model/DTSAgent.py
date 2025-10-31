@@ -114,14 +114,18 @@ class DTSAgent:
                         result = future.result()
                         results[item_idx] = result
                     except Exception as exc:
+                        import traceback
+                        error_details = traceback.format_exc()
                         print(f'Error performing DTS (round {turn_idx + 1}, utterance {item_idx}): {exc}')
+                        print(f'Error details: {error_details}')
                         results[item_idx] = {
                             'response': f"Thread execution error: {exc}",
                             'input_tokens': 0,
                             'output_tokens': 0,
                             'attempts': 1,
                             'success': False,
-                            'error': str(exc)
+                            'error': str(exc),
+                            'error_details': error_details
                         }
                     finally:
                         pbar.update(1)
@@ -170,11 +174,18 @@ class DTSAgent:
                     'success': True
                 }
             except Exception as exc:
+                import traceback
+                error_details = traceback.format_exc()
                 if attempt < max_retries:
                     time.sleep(1 * (attempt + 1))
                     continue
                 else:
-                    error_msg = f"Failed after {max_retries} retries: {exc}"
+                    error_msg = f"Failed after {max_retries + 1} attempts: {exc}"
+                    # Log detailed error for debugging
+                    print(f"Error in _generate_single_response (utterance {item_idx}): {error_msg}")
+                    print(f"Error details: {error_details}")
+                    if hasattr(exc, 'args') and len(exc.args) > 0:
+                        print(f"Exception args: {exc.args}")
                     return {
                         'response': error_msg,
                         'parsed_response': None,
@@ -182,7 +193,8 @@ class DTSAgent:
                         'output_tokens': 0,
                         'attempts': max_retries + 1,
                         'success': False,
-                        'error': str(exc)
+                        'error': str(exc),
+                        'error_details': error_details
                     }
 
     def _validate_and_parse_response(self, response):
@@ -226,59 +238,101 @@ class DTSAgent:
             return parsed
 
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON format: {e}")
+            error_msg = f"Invalid JSON format: {e}. Response was: {response[:200]}..."
+            raise ValueError(error_msg)
         except Exception as e:
-            raise ValueError(f"Response validation failed: {e}")
+            error_msg = f"Response validation failed: {e}. Response was: {response[:200]}..."
+            raise ValueError(error_msg)
 
     def _add_handshake_tags(self, conversation_context, dialogue, current_idx, handshake_results):
         # Get handshake results for current dialogue
-        dialogue_idx = None
-        for i, d in enumerate(self.dataset):
-            if d.dial_id == dialogue.dial_id:
-                dialogue_idx = i
-                break
-
-        if dialogue_idx is None or dialogue_idx >= len(handshake_results):
+        handshake_dialogue = None
+        
+        if handshake_results is None:
             return conversation_context
-
-        handshake_dialogue = handshake_results[dialogue_idx]
+        
+        # Handle both list and dictionary formats
+        if isinstance(handshake_results, dict):
+            # Dictionary format: key is dial_id
+            handshake_dialogue = handshake_results.get(dialogue.dial_id)
+        elif isinstance(handshake_results, list):
+            # List format: index corresponds to dialogue index in dataset
+            dialogue_idx = None
+            for i, d in enumerate(self.dataset):
+                if d.dial_id == dialogue.dial_id:
+                    dialogue_idx = i
+                    break
+            
+            if dialogue_idx is None or dialogue_idx >= len(handshake_results):
+                return conversation_context
+            
+            handshake_dialogue = handshake_results[dialogue_idx]
+        else:
+            return conversation_context
+        
+        # Check if handshake_dialogue is valid
+        if handshake_dialogue is None or (isinstance(handshake_dialogue, list) and len(handshake_dialogue) == 0):
+            return conversation_context
+        
+        # Ensure handshake_dialogue is a list for index-based access
+        if not isinstance(handshake_dialogue, list):
+            return conversation_context
 
         # Add handshake tags to previous utterances
         tagged_previous = []
+        # Count padding tokens at the beginning
+        padding_count = 0
+        for utt in conversation_context["previous"]:
+            if utt in ["<dialogue_start>", "<dialogue_end>"]:
+                padding_count += 1
+            else:
+                break
+        
+        # Calculate starting index of actual utterances (excluding padding)
+        actual_start_idx = current_idx - (len(conversation_context["previous"]) - padding_count)
+        
         for i, utterance in enumerate(conversation_context["previous"]):
             if utterance in ["<dialogue_start>", "<dialogue_end>"]:
                 tagged_previous.append(utterance)
             else:
-                # Calculate actual index in dialogue
-                actual_idx = current_idx - len(conversation_context["previous"]) + i
-                if 0 <= actual_idx < len(handshake_dialogue):
-                    handshake_result = handshake_dialogue[actual_idx]
-                    if isinstance(handshake_result, dict) and handshake_result.get('success', False):
-                        parsed = handshake_result.get('parsed_response', {})
-                        if parsed and 'result' in parsed:
-                            tag = parsed['result']
-                            tagged_utterance = f"[{tag}] {utterance}"
+                # Calculate actual index in dialogue (skip padding)
+                actual_idx = actual_start_idx + (i - padding_count)
+                try:
+                    if isinstance(handshake_dialogue, list) and 0 <= actual_idx < len(handshake_dialogue):
+                        handshake_result = handshake_dialogue[actual_idx]
+                        if isinstance(handshake_result, dict) and handshake_result.get('success', False):
+                            parsed = handshake_result.get('parsed_response', {})
+                            if parsed and 'result' in parsed:
+                                tag = parsed['result']
+                                tagged_utterance = f"[{tag}] {utterance}"
+                            else:
+                                tagged_utterance = f"[O] {utterance}"
                         else:
                             tagged_utterance = f"[O] {utterance}"
                     else:
                         tagged_utterance = f"[O] {utterance}"
-                else:
+                except (IndexError, KeyError, TypeError) as e:
+                    # Fallback to default tag if index access fails
                     tagged_utterance = f"[O] {utterance}"
                 tagged_previous.append(tagged_utterance)
 
         # Add handshake tag to current utterance
-        if current_idx < len(handshake_dialogue):
-            handshake_result = handshake_dialogue[current_idx]
-            if isinstance(handshake_result, dict) and handshake_result.get('success', False):
-                parsed = handshake_result.get('parsed_response', {})
-                if parsed and 'result' in parsed:
-                    tag = parsed['result']
-                    tagged_current = f"[{tag}] {conversation_context['current']}"
+        try:
+            if isinstance(handshake_dialogue, list) and 0 <= current_idx < len(handshake_dialogue):
+                handshake_result = handshake_dialogue[current_idx]
+                if isinstance(handshake_result, dict) and handshake_result.get('success', False):
+                    parsed = handshake_result.get('parsed_response', {})
+                    if parsed and 'result' in parsed:
+                        tag = parsed['result']
+                        tagged_current = f"[{tag}] {conversation_context['current']}"
+                    else:
+                        tagged_current = f"[O] {conversation_context['current']}"
                 else:
                     tagged_current = f"[O] {conversation_context['current']}"
             else:
                 tagged_current = f"[O] {conversation_context['current']}"
-        else:
+        except (IndexError, KeyError, TypeError) as e:
+            # Fallback to default tag if index access fails
             tagged_current = f"[O] {conversation_context['current']}"
 
         # Add handshake tags to next utterances
@@ -287,20 +341,24 @@ class DTSAgent:
             if utterance in ["<dialogue_start>", "<dialogue_end>"]:
                 tagged_next.append(utterance)
             else:
-                # Calculate actual index in dialogue
+                # Calculate actual index in dialogue (skip padding)
                 actual_idx = current_idx + 1 + i
-                if 0 <= actual_idx < len(handshake_dialogue):
-                    handshake_result = handshake_dialogue[actual_idx]
-                    if isinstance(handshake_result, dict) and handshake_result.get('success', False):
-                        parsed = handshake_result.get('parsed_response', {})
-                        if parsed and 'result' in parsed:
-                            tag = parsed['result']
-                            tagged_utterance = f"[{tag}] {utterance}"
+                try:
+                    if isinstance(handshake_dialogue, list) and 0 <= actual_idx < len(handshake_dialogue):
+                        handshake_result = handshake_dialogue[actual_idx]
+                        if isinstance(handshake_result, dict) and handshake_result.get('success', False):
+                            parsed = handshake_result.get('parsed_response', {})
+                            if parsed and 'result' in parsed:
+                                tag = parsed['result']
+                                tagged_utterance = f"[{tag}] {utterance}"
+                            else:
+                                tagged_utterance = f"[O] {utterance}"
                         else:
                             tagged_utterance = f"[O] {utterance}"
                     else:
                         tagged_utterance = f"[O] {utterance}"
-                else:
+                except (IndexError, KeyError, TypeError) as e:
+                    # Fallback to default tag if index access fails
                     tagged_utterance = f"[O] {utterance}"
                 tagged_next.append(tagged_utterance)
 
