@@ -1,6 +1,6 @@
 from sklearn.metrics import f1_score, precision_score, recall_score
 
-def compute_pk(reference, hypothesis, k: int = None) -> float:
+def compute_pk(reference, hypothesis, k: int = None):
     n = len(reference)
     if k is None:
         k = max(1, n // 2)
@@ -20,7 +20,7 @@ def compute_pk(reference, hypothesis, k: int = None) -> float:
     return pk_sum / (n - k + 1)
 
 
-def compute_wd(reference, hypothesis) -> float:
+def compute_wd(reference, hypothesis):
     n = len(reference)
     wd_sum = 0.0
 
@@ -31,8 +31,7 @@ def compute_wd(reference, hypothesis) -> float:
     return wd_sum / n
 
 
-def compute_segmentation_f1(reference, hypothesis,
-                            window_tolerance: int = 1) -> Tuple[float, float, float]:
+def compute_segmentation_f1(reference, hypothesis, window_tolerance: int = 1):
     # Ensure both sequences have the same length
     min_length = min(len(reference), len(hypothesis))
     ref_seq = reference[:min_length]
@@ -44,7 +43,7 @@ def compute_segmentation_f1(reference, hypothesis,
     return precision, recall, f1
 
 
-def evaluate_segmentation(reference, hypothesis) -> dict:
+def evaluate_segmentation(reference, hypothesis):
     # Calculate PK
     pk = compute_pk(reference, hypothesis)
 
