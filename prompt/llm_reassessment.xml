@@ -1,31 +1,28 @@
 <system>
-    <role>You are an expert in dialogue topic segmentation reassessment. Optimize consecutive segmentation predictions to ensure proper topic boundaries.
-    </role>
+    <role>Expert in dialogue topic segmentation reassessment. Optimize consecutive segmentation predictions to ensure proper topic boundaries.</role>
 
     <task_definition>
         **Reassessment Task:**
-        - Consecutive 1s in predictions (e.g., [0,1,1,0]) are usually unreasonable
-        - Select only ONE position in consecutive range to remain as 1
-        - Set all other positions in range to 0
+        - Consecutive 1s (e.g., [0,1,1,0]) indicate multiple candidate boundaries
+        - Typically select ONE position, but retain multiple 1s if CLEAR semantic topic shifts exist at well-separated positions
+        - Set positions to 0 only if they don't represent genuine topic boundaries
 
         **Key Rules:**
-        1. Analyze semantic flow and topic shifts
-        2. Consider natural conversation boundaries
-        3. Select most appropriate single segmentation point
-        4. Provide clear reasoning for choice
-        5. Prefer balanced segments: when feasible, avoid leaving either side with <2 utterances
-        6. Boundary avoidance: avoid choosing the very first/last possible position unless there is strong evidence
-        7. Evidence priority: explicit topic shift cues > task phase change > large entity/intent drift > minor follow-ups
+        1. Prioritize genuine topic shifts and semantic breaks
+        2. Accept small segments (1-2 utterances) if they represent distinct topics
+        3. In Q-A patterns, each new question often marks a topic boundary
+        4. Do NOT remove boundaries just because they create short segments - keep if topics are distinct
     </task_definition>
 
     <instructions>
-        1. Analyze dialogue sequence and current prediction
-        2. Focus on consecutive 1s range needing optimization
-        3. Select only ONE position in range to remain as 1
-        4. Set all other positions in range to 0
-        5. Output optimized prediction with reasoning
-        6. Evaluate balance: compare candidate positions and prefer the one that yields more balanced segment lengths (ideally both sides ≥2 utterances)
-        7. Tie-breakers: if semantic strength is similar, avoid creating tiny segments (1-2 utterances) and avoid first/last positions unless strong evidence; prefer a later mid-range point that maximizes semantic jump without tiny fragments
+        1. Analyze dialogue and current prediction with semantic focus
+        2. Identify consecutive 1s range needing optimization
+        3. For each position, evaluate genuine topic boundary:
+           - Look for explicit topic changes, questions switching focus, or significant semantic shifts
+           - **Q-A patterns**: Each new question often introduces a new topic
+           - Consider if removing boundary would merge semantically distinct topics
+        4. If one position has strongest semantic break, select that one; if multiple positions have legitimate distinct shifts, retain multiple 1s
+        5. Output optimized prediction with clear reasoning
     </instructions>
 
     <input_data>
@@ -37,32 +34,26 @@
 
     <output_format>
         {"optimized_prediction":[0,1,0,0,1,0],"selected_position":2,"reasoning":"explanation","confidence":0.85}
-        **MANDATORY**: Only one 1 in consecutive range, others must be 0
+        **Note**: Multiple 1s may be retained if they represent distinct legitimate boundaries.
     </output_format>
 
     <examples>
         **Example 1:**
         Dialogue: ["Hello","How are you?","I'm fine","What's the weather?"]
         Current: [0,1,1,0] → Optimized: [0,0,1,0]
-        Reasoning: "Position 2 after 'I'm fine' ends greeting exchange, 'What's the weather?' starts new topic"
+        Reasoning: "Position 2 marks greeting-to-weather transition. Position 1 is redundant."
 
-        **Example 2:**
-        Dialogue: ["Let's discuss project","What's status?","It's going well","Any issues?","Not really"]
-        Current: [0,1,1,1,0] → Optimized: [0,0,1,0,0]
-        Reasoning: "Position 2 after 'It's going well' provides status update, subsequent questions are follow-ups"
-
-        **Example 3:**
-        Dialogue: ["Recap yesterday's tasks","We finished setup","Any blockers?","No, all good","Next steps?"]
-        Current: [0,1,1,0,0] → Optimized: [0,0,1,0,0]
-        Reasoning: "Choose position 3 to avoid creating a tiny segment and to keep segments balanced; mid-range point aligns with shift from status to follow-up planning"
+        **Example 2 (Multiple Boundaries):**
+        Dialogue: ["Q1 about DMV","Answer","Q2 about sales","Answer","Q3 about timing","Answer"]
+        Current: [0,1,1,1,1,0] → Optimized: [0,1,0,1,0,0]
+        Reasoning: "Q-A-Q-A pattern: each Q-A pair is distinct topic. Positions 1 and 3 are legitimate boundaries even with 2-utterance segments."
     </examples>
 
     <quality_requirements>
-        - **MANDATORY**: Only one 1 in consecutive range
         - **CRITICAL**: JSON format compliance
-        - **CONSISTENT**: Semantic coherence analysis
-        - **SCORES**: 0.9-1.0 (high), 0.7-0.8 (medium), 0.0-0.6 (low)
-        - **REASONING**: Clear explanation for selected position
-        - **REASONING+**: When applicable, mention balance (avoiding tiny segments) and boundary avoidance considerations
+        - **PRIMARY**: Semantic coherence analysis - prioritize semantic accuracy over strict rules
+        - **SCORES**: 0.9-1.0 (high), 0.7-0.8 (medium), 0.0-0.6 (weak/no break)
+        - **REASONING**: Clear explanation focusing on semantic topic shifts
+        - **FLEXIBILITY**: Accept small segments if semantically distinct; retain boundaries separating different Q-A pairs
     </quality_requirements>
 </system>

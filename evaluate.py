@@ -444,13 +444,37 @@ def run_evaluation(num_samples=None, dataset_name_or_path='vfh'):
         reference = reference[:min_length]
         hypothesis = hypothesis[:min_length]
 
-        print("utt_id | pred | real | 差异")
-        print("-" * 25)
+        # 获取reassessment的原始预测（如果有）
+        original_prediction = None
+        if reassessment_info and reassessment_info.get('changes_made', False):
+            original_prediction = reassessment_info.get('original_prediction', [])
+            # 确保长度一致
+            if original_prediction:
+                original_prediction = original_prediction[:min_length]
+
+        # 打印表头
+        if original_prediction:
+            print("utt_id | pred | real | reassess | 差异")
+            print("-" * 40)
+        else:
+            print("utt_id | pred | real | 差异")
+            print("-" * 25)
+
         for utt_id in range(min_length):
             pred = hypothesis[utt_id]
             real = reference[utt_id]
             diff = "✓" if pred == real else "✗"
-            print(f"{utt_id:5d} | {pred:4d} | {real:4d} | {diff}")
+            
+            if original_prediction and utt_id < len(original_prediction):
+                orig_pred = original_prediction[utt_id]
+                # 显示原始预测值，如果被修改了则标记
+                if orig_pred != pred:
+                    reassess_str = f"{orig_pred}->{pred}"
+                else:
+                    reassess_str = "-"
+                print(f"{utt_id:5d} | {pred:4d} | {real:4d} | {reassess_str:9s} | {diff}")
+            else:
+                print(f"{utt_id:5d} | {pred:4d} | {real:4d} | {diff}")
 
         # 计算准确率
         correct = sum(1 for p, r in zip(hypothesis, reference) if p == r)
