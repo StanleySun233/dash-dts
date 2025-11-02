@@ -20,15 +20,31 @@ def parse_llm_response(response_text):
 
 def convert_numpy_types(obj):
     import numpy as np
+    from decimal import Decimal
 
+    # Handle numpy types
     if isinstance(obj, np.integer):
         return int(obj)
     elif isinstance(obj, np.floating):
         return float(obj)
     elif isinstance(obj, np.ndarray):
         return obj.tolist()
+    # Handle Decimal types (from segeval library)
+    elif isinstance(obj, Decimal):
+        return float(obj)
     elif isinstance(obj, dict):
-        return {key: convert_numpy_types(value) for key, value in obj.items()}
+        # Recursively process dictionary, but handle numeric string values
+        result = {}
+        for key, value in obj.items():
+            # For metrics keys (PK, WD, Precision, Recall, F1), ensure numeric values are floats
+            if key in ['PK', 'WD', 'Precision', 'Recall', 'F1'] and isinstance(value, str):
+                try:
+                    result[key] = float(value)
+                except (ValueError, TypeError):
+                    result[key] = convert_numpy_types(value)
+            else:
+                result[key] = convert_numpy_types(value)
+        return result
     elif isinstance(obj, list):
         return [convert_numpy_types(item) for item in obj]
     else:
@@ -52,7 +68,8 @@ def convert_predictions_to_boundary(predictions, total_length=None):
     boundary = []
 
     for i, pred in enumerate(predictions):
-        if total_length is not None and i == total_length - 1:
+        # 第一个位置永远不应该是分割点（对话开始前没有边界）
+        if i == 0:
             boundary.append(0)
             continue
 
@@ -68,20 +85,19 @@ def convert_predictions_to_boundary(predictions, total_length=None):
     return boundary
 
 import yaml
+import os
 
 
 def load_config(path="config.yaml"):
     with open(path, 'r', encoding='utf-8') as file:
-        config = yaml.load(file, Loader=yaml.FullLoader)
+        content = file.read()
+        # Expand environment variables (supports $VAR and ${VAR} formats)
+        content = os.path.expandvars(content)
+        config = yaml.load(content, Loader=yaml.FullLoader)
     return config
 
 
-# Dataset helpers
 def resolve_dataset_path(dataset_name_or_path: str) -> str:
-    """Return dataset json path from name or passthrough if a path is given.
-
-    Accepts names: 'vfh', 'dialseg_711', 'doc2dial'. If input endswith .json, returns as-is.
-    """
     if not dataset_name_or_path:
         dataset_name_or_path = 'vfh'
     if dataset_name_or_path.lower().endswith('.json'):

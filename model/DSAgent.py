@@ -2,6 +2,11 @@ import os
 import pickle
 from pathlib import Path
 
+# Set environment variable before importing sentence_transformers
+# Ensure HF_ENDPOINT environment variable is set (use mirror if not set)
+if 'HF_ENDPOINT' not in os.environ:
+    os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
@@ -12,6 +17,10 @@ class DSAgent:
         self.dataset = dataset
         self.model_name = model
         self.embedding_dir = embedding_dir
+
+        # Ensure environment variable is set again (prevent modification by other modules)
+        if 'HF_ENDPOINT' not in os.environ:
+            os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 
         self.model = SentenceTransformer(model)
         Path(self.embedding_dir).mkdir(parents=True, exist_ok=True)

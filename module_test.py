@@ -365,13 +365,13 @@ def run_all_tests(dataset_name_or_path='vfh'):
     config = load_config("config.yaml")
     dataset = DialogueDataset(resolve_dataset_path(dataset_name_or_path))
 
-    # 片段相关测试
+    # Segment-related tests
     segments_cutting_results = test_segments_cutting(dataset, test_count=3)
 
-    # 创建DSAgent用于相似性匹配，并确保embeddings已生成
+    # Create DSAgent for similarity matching and ensure embeddings are generated
     ds_agent = DSAgent(dataset)
 
-    # 先尝试加载embeddings，如果失败则生成
+    # Try to load embeddings first, generate if loading fails
     print("Attempting to load existing segment embeddings...")
     load_success = ds_agent.load_segment_embeddings()
 
@@ -381,16 +381,16 @@ def run_all_tests(dataset_name_or_path='vfh'):
     else:
         print("Successfully loaded existing segment embeddings!")
 
-    # 使用同一个ds_agent进行片段测试
+    # Use the same ds_agent for segment tests
     segment_similarity_results = test_segment_similarity(dataset, ds_agent, test_count=3)
     single_segment_result = test_single_segment_matching(dataset, ds_agent)
 
-    # Agent测试
+    # Agent tests
     api_key = config["api_key"]["openrouter"]
     base_url = config["base_url"]["openrouter"]
     model = config["model"]["openrouter"][0]
 
-    # 运行各个Agent测试
+    # Run each Agent test
     hs_agent_result = test_hs_agent(dataset, api_key, base_url, model, max_turns=2, num_threads=2)
     pn_agent_result = test_pn_agent(dataset, api_key, base_url, model, max_turns=2, num_threads=2)
     dts_agent_result = test_dts_agent(dataset, api_key, base_url, model, ds_agent, max_turns=2, num_threads=2)
@@ -411,10 +411,10 @@ def run_segment_tests(dataset_name_or_path='vfh'):
 
     segments_cutting_results = test_segments_cutting(dataset, test_count=3)
 
-    # 创建DSAgent用于相似性匹配，并确保embeddings已生成
+    # Create DSAgent for similarity matching and ensure embeddings are generated
     ds_agent = DSAgent(dataset)
 
-    # 先尝试加载embeddings，如果失败则生成
+    # Try to load embeddings first, generate if loading fails
     print("Attempting to load existing segment embeddings...")
     load_success = ds_agent.load_segment_embeddings()
 
@@ -435,7 +435,7 @@ def run_segment_tests(dataset_name_or_path='vfh'):
 
 
 def run_agent_tests(dataset_name_or_path='vfh'):
-    """运行所有Agent测试"""
+    """Run all Agent tests"""
     print("=== Running Agent Tests ===")
     config = load_config("config.yaml")
     dataset = DialogueDataset(resolve_dataset_path(dataset_name_or_path))
@@ -444,10 +444,10 @@ def run_agent_tests(dataset_name_or_path='vfh'):
     base_url = config["base_url"]["openrouter"]
     model = config["model"]["openrouter"][0]
 
-    # 创建DSAgent用于相似性匹配，并确保embeddings已生成
+    # Create DSAgent for similarity matching and ensure embeddings are generated
     ds_agent = DSAgent(dataset)
 
-    # 先尝试加载embeddings，如果失败则生成
+    # Try to load embeddings first, generate if loading fails
     print("Attempting to load existing segment embeddings...")
     load_success = ds_agent.load_segment_embeddings()
 
@@ -457,7 +457,7 @@ def run_agent_tests(dataset_name_or_path='vfh'):
     else:
         print("Successfully loaded existing segment embeddings!")
 
-    # 运行各个Agent测试
+    # Run each Agent test
     hs_agent_result = test_hs_agent(dataset, api_key, base_url, model, max_turns=2, num_threads=2)
     pn_agent_result = test_pn_agent(dataset, api_key, base_url, model, max_turns=2, num_threads=2)
     dts_agent_result = test_dts_agent(dataset, api_key, base_url, model, ds_agent, max_turns=2, num_threads=2)

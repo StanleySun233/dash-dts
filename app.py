@@ -26,22 +26,17 @@ from impl import (
     run_reassess_by_id,
 )
 
-# Create Flask app
 app = Flask(__name__)
-
-# Load configuration from config file
 config = load_config("config.yaml")
 api_key = config["api_key"]["openrouter"]
 base_url = config["base_url"]["openrouter"]
 model = config["model"]["openrouter"][0]
 window_size = config.get("window_size", 3)
 
-# Initialize dataset for agents (supports env DATASET or default 'vfh')
 _dataset_name = os.environ.get('DATASET', 'vfh')
 _dataset_path = resolve_dataset_path(_dataset_name)
 dataset = DialogueDataset(_dataset_path)
 
-# Initialize Agents
 hs_agent = HSAgent(dataset, api_key, base_url, model, window_size=3)
 pn_agent = PNAgent(dataset, api_key, base_url, model, window_size=3)
 dts_agent = DTSAgent(dataset, api_key, base_url, model, window_size=3)
@@ -180,7 +175,6 @@ if __name__ == '__main__':
     parser.add_argument('--host', type=str, default='0.0.0.0')
     args = parser.parse_args()
 
-    # Re-init dataset/agents if CLI overrides
     ds_path = resolve_dataset_path(args.dataset)
     if ds_path != _dataset_path:
         dataset = DialogueDataset(ds_path)

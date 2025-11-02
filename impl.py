@@ -212,26 +212,102 @@ def run_reassess(reassessment_agent, content, prediction):
 
 def run_segment(dataset, dts_agent, dial_id, handshake_results, few_shot_examples, similarity_examples):
     target_dialogue = None
-    for dialogue in dataset:
+    target_dialogue_idx = None
+    for idx, dialogue in enumerate(dataset):
         if dialogue.dial_id == dial_id:
             target_dialogue = dialogue
+            target_dialogue_idx = idx
             break
 
     if target_dialogue is None:
         return {"error": f"Dialogue {dial_id} not found"}, 404
 
-    prediction_results = dts_agent.perform_dialogue_topic_segmentation(
-        max_turns=1,
-        num_threads=8,
-        handshake_results=handshake_results,
-        few_shot_examples=few_shot_examples,
-        similarity_examples=similarity_examples
-    )
+    # Extract examples for this specific dialogue
+    # Handle both single-dialogue format (from API) and multi-dialogue format (from evaluation)
+    current_handshake = None
+    if handshake_results:
+        if isinstance(handshake_results, dict):
+            # Dictionary format: key is dial_id, value is list of utterance results
+            current_handshake = handshake_results  # Already in dict format
+        elif isinstance(handshake_results, list):
+            # Check if this is a single dialogue result (list of utterance results)
+            # or multi-dialogue format (list of dialogues, each containing utterance results)
+            if len(handshake_results) > 0:
+                # If first element is a dict with 'success' or 'parsed_response', it's single dialogue format
+                if isinstance(handshake_results[0], dict) and ('success' in handshake_results[0] or 'parsed_response' in handshake_results[0]):
+                    # Single dialogue format: convert to dict with dial_id as key
+                    current_handshake = {dial_id: handshake_results}
+                elif target_dialogue_idx is not None and target_dialogue_idx < len(handshake_results):
+                    # Multi-dialogue format: extract specific dialogue
+                    current_handshake = {dial_id: handshake_results[target_dialogue_idx]}
+                else:
+                    # Try to use as-is (might be single dialogue format)
+                    current_handshake = {dial_id: handshake_results}
+        else:
+            current_handshake = handshake_results
 
-    if not prediction_results or len(prediction_results) == 0:
+    current_few_shot = None
+    if few_shot_examples:
+        if isinstance(few_shot_examples, dict):
+            current_few_shot = few_shot_examples  # Already in dict format
+        elif isinstance(few_shot_examples, list):
+            # Check if this is a single dialogue result (list of utterance strings)
+            # or multi-dialogue format (list of dialogues)
+            if len(few_shot_examples) > 0:
+                # If first element is a string or None, it's single dialogue format (list of utterance examples)
+                if isinstance(few_shot_examples[0], (str, type(None))):
+                    # Single dialogue format: use directly (it's already per-utterance)
+                    current_few_shot = few_shot_examples
+                elif target_dialogue_idx is not None and target_dialogue_idx < len(few_shot_examples):
+                    # Multi-dialogue format: extract specific dialogue
+                    current_few_shot = few_shot_examples[target_dialogue_idx]
+                else:
+                    # Try to use as-is (might be single dialogue format)
+                    current_few_shot = few_shot_examples
+        else:
+            current_few_shot = few_shot_examples
+
+    current_similarity = None
+    if similarity_examples:
+        if isinstance(similarity_examples, dict):
+            current_similarity = similarity_examples  # Already in dict format
+        elif isinstance(similarity_examples, list):
+            # Check if this is a single dialogue result or multi-dialogue format
+            if len(similarity_examples) > 0:
+                # If first element is a string, it's likely single dialogue format
+                if isinstance(similarity_examples[0], str):
+                    # Single dialogue format: might be a string representation
+                    current_similarity = similarity_examples[0] if len(similarity_examples) == 1 else str(similarity_examples)
+                elif target_dialogue_idx is not None and target_dialogue_idx < len(similarity_examples):
+                    # Multi-dialogue format: extract specific dialogue
+                    current_similarity = similarity_examples[target_dialogue_idx]
+                else:
+                    # Try to use as-is
+                    current_similarity = str(similarity_examples) if not isinstance(similarity_examples, str) else similarity_examples
+        else:
+            # String or other format: use directly
+            current_similarity = similarity_examples
+
+    # Process the single dialogue directly using _process_single_dialogue
+    try:
+        predictions = dts_agent._process_single_dialogue(
+            target_dialogue,
+            turn_idx=0,
+            num_threads=8,
+            few_shot_examples=current_few_shot,
+            similarity_examples=current_similarity,
+            handshake_results=current_handshake
+        )
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error in run_segment._process_single_dialogue: {e}")
+        print(f"Error details: {error_details}")
+        return {"error": f"Failed to process dialogue: {str(e)}", "details": error_details}, 500
+
+    if not predictions or len(predictions) == 0:
         return {"error": "Failed to generate predictions"}, 500
 
-    predictions = prediction_results[0]
     prediction_boundary = convert_predictions_to_boundary(predictions, len(target_dialogue.utterances))
 
     prediction_details = []

@@ -17,7 +17,7 @@ class LLMReassessmentAgent:
         self.model = model
         self.llm_api = LLMAPI(api_key, base_url, model)
         self.prompt = LLMReassessmentPrompt()
-        # 窗口大小：指在连续范围两侧各取多少条上下文（不含连续范围内部）
+        # Window size: number of context utterances to take on each side of consecutive range (excluding the consecutive range itself)
         self.window_size = window_size
 
     def detect_consecutive_ones(self, prediction: List[int]) -> List[Tuple[int, int]]:
@@ -43,24 +43,24 @@ class LLMReassessmentAgent:
     def reassess_consecutive_ones(self, utterances: List[str], prediction: List[int],
                                   consecutive_ranges: List[Tuple[int, int]], num_threads: int = 8) -> List[int]:
         """
-        使用LLM重新评估连续1的情况（多线程版本）
+        Reassess consecutive 1s using LLM (multi-threaded version)
         
         Args:
-            utterances: 对话序列
-            prediction: 原始预测
-            consecutive_ranges: 连续1的位置范围
-            num_threads: 线程数量，默认8
+            utterances: Dialogue sequence
+            prediction: Original prediction
+            consecutive_ranges: Position ranges of consecutive 1s
+            num_threads: Number of threads, default 8
             
         Returns:
-            优化后的预测序列
+            Optimized prediction sequence
         """
         if not consecutive_ranges:
             return prediction.copy()
 
-        # 创建优化后的预测
+        # Create optimized prediction
         optimized_prediction = prediction.copy()
 
-        # 使用多线程处理连续1范围
+        # Process consecutive 1 ranges using multi-threading
         with ThreadPoolExecutor(max_workers=num_threads) as executor:
             future_to_index = {
                 executor.submit(
@@ -82,7 +82,7 @@ class LLMReassessmentAgent:
                         results[idx] = result
                     except Exception as exc:
                         print(f'Error processing consecutive range {idx}: {exc}')
-                        # 使用启发式方法作为后备
+                        # Use heuristic method as fallback
                         start, end = consecutive_ranges[idx]
                         results[idx] = {
                             'context_start': max(0, start - self.window_size),
@@ -93,7 +93,7 @@ class LLMReassessmentAgent:
                     finally:
                         pbar.update(1)
 
-        # 按顺序应用结果
+        # Apply results in order
         for idx in range(len(consecutive_ranges)):
             if idx in results:
                 result = results[idx]
@@ -101,7 +101,7 @@ class LLMReassessmentAgent:
                 context_end = result['context_end']
                 optimized_segment = result['optimized_segment']
 
-                # 更新优化后的预测
+                # Update optimized prediction
                 for i, val in enumerate(optimized_segment):
                     if context_start + i < len(optimized_prediction):
                         optimized_prediction[context_start + i] = val
@@ -111,24 +111,24 @@ class LLMReassessmentAgent:
     def _process_single_consecutive_range(self, utterances: List[str], prediction: List[int],
                                           start: int, end: int) -> Dict:
         """
-        处理单个连续1范围
+        Process a single consecutive 1 range
         
         Args:
-            utterances: 对话序列
-            prediction: 原始预测
-            start: 连续1的起始位置
-            end: 连续1的结束位置
+            utterances: Dialogue sequence
+            prediction: Original prediction
+            start: Start position of consecutive 1s
+            end: End position of consecutive 1s
             
         Returns:
-            包含优化结果的字典
+            Dictionary containing optimization results
         """
-        # 提取相关对话片段
+        # Extract relevant dialogue segment
         context_start = max(0, start - self.window_size)
         context_end = min(len(utterances), end + self.window_size + 1)
         context_utterances = utterances[context_start:context_end]
         context_prediction = prediction[context_start:context_end]
 
-        # 构建提示词
+        # Build prompt
         prompt = self._build_reassessment_prompt(
             context_utterances,
             context_prediction,
@@ -139,10 +139,10 @@ class LLMReassessmentAgent:
         )
 
         try:
-            # 调用LLM进行重新评估
+            # Call LLM for reassessment
             response = self.llm_api.generate_response(prompt)
 
-            # 解析LLM响应
+            # Parse LLM response
             optimized_segment = self._parse_llm_response(response, len(context_prediction))
 
             return {
@@ -153,8 +153,8 @@ class LLMReassessmentAgent:
             }
 
         except Exception as e:
-            print(f"Warning: LLM重新评估失败: {e}")
-            # 如果LLM调用失败，使用简单的启发式方法
+            print(f"Warning: LLM reassessment failed: {e}")
+            # If LLM call fails, use simple heuristic method
             optimized_segment = self._heuristic_optimization_segment(prediction, start, end)
             return {
                 'context_start': context_start,
@@ -165,25 +165,25 @@ class LLMReassessmentAgent:
 
     def _heuristic_optimization_segment(self, prediction: List[int], start: int, end: int) -> List[int]:
         """
-        启发式优化方法，为单个连续1范围生成优化后的片段
+        Heuristic optimization method to generate optimized segment for a single consecutive 1 range
         
         Args:
-            prediction: 预测序列
-            start: 连续1的起始位置
-            end: 连续1的结束位置
+            prediction: Prediction sequence
+            start: Start position of consecutive 1s
+            end: End position of consecutive 1s
             
         Returns:
-            优化后的片段
+            Optimized segment
         """
-        # 计算上下文范围
+        # Calculate context range
         context_start = max(0, start - self.window_size)
         context_end = min(len(prediction), end + self.window_size + 1)
         context_length = context_end - context_start
 
-        # 创建优化后的片段
+        # Create optimized segment
         optimized_segment = [0] * context_length
 
-        # 简单策略：保留中间位置的1，其他设为0
+        # Simple strategy: keep 1 at middle position, set others to 0
         if end > start:
             middle = (start + end) // 2
             segment_middle = middle - context_start
@@ -195,7 +195,7 @@ class LLMReassessmentAgent:
     def _build_reassessment_prompt(self, utterances: List[str], prediction: List[int],
                                    consecutive_range: Tuple[int, int], previous_context: List[str] = None,
                                    consecutive_context: List[str] = None, next_context: List[str] = None) -> str:
-        """构建重新评估的提示词"""
+        """Build reassessment prompt"""
         return self.prompt.format_prompt(
             utterances,
             prediction,
@@ -206,9 +206,9 @@ class LLMReassessmentAgent:
         )
 
     def _parse_llm_response(self, response: str, expected_length: int) -> List[int]:
-        """解析LLM响应，提取优化后的预测序列"""
+        """Parse LLM response to extract optimized prediction sequence"""
         try:
-            # 尝试解析JSON响应
+            # Attempt to parse JSON response
             json_match = re.search(r'\{[^}]*"optimized_prediction"[^}]*\}', response, re.DOTALL)
             if json_match:
                 json_str = json_match.group(0)
@@ -218,52 +218,52 @@ class LLMReassessmentAgent:
                     if len(prediction) == expected_length:
                         return prediction
 
-            # 如果JSON解析失败，尝试从响应中提取预测序列
-            # 查找类似 [0, 1, 0, 0, 1, 0] 的模式
+            # If JSON parsing fails, attempt to extract prediction sequence from response
+            # Look for patterns like [0, 1, 0, 0, 1, 0]
             pattern = r'\[([0-9,\s]+)\]'
             matches = re.findall(pattern, response)
 
             if matches:
-                # 取第一个匹配的序列
+                # Take the first matched sequence
                 prediction_str = matches[0]
                 prediction = [int(x.strip()) for x in prediction_str.split(',')]
 
-                # 确保长度正确
+                # Ensure correct length
                 if len(prediction) == expected_length:
                     return prediction
 
-            # 如果解析失败，尝试其他模式
+            # If parsing fails, try other patterns
             lines = response.split('\n')
             for line in lines:
-                if 'optimized_prediction' in line or '预测' in line:
-                    # 查找数字序列
+                if 'optimized_prediction' in line or 'prediction' in line:
+                    # Find number sequence
                     numbers = re.findall(r'\b[01]\b', line)
                     if len(numbers) == expected_length:
                         return [int(x) for x in numbers]
 
-            # 如果都失败了，返回全0序列
-            print(f"Warning: 无法解析LLM响应，使用默认值")
+            # If all fail, return all-zero sequence
+            print(f"Warning: Unable to parse LLM response, using default values")
             return [0] * expected_length
 
         except Exception as e:
-            print(f"Warning: 解析LLM响应时出错: {e}")
+            print(f"Warning: Error parsing LLM response: {e}")
             return [0] * expected_length
 
     def _heuristic_optimization(self, prediction: List[int], start: int, end: int) -> List[int]:
         """
-        启发式优化方法，当LLM调用失败时使用
+        Heuristic optimization method used when LLM call fails
         
         Args:
-            prediction: 预测序列
-            start: 连续1的起始位置
-            end: 连续1的结束位置
+            prediction: Prediction sequence
+            start: Start position of consecutive 1s
+            end: End position of consecutive 1s
             
         Returns:
-            优化后的预测序列
+            Optimized prediction sequence
         """
         optimized = prediction.copy()
 
-        # 简单策略：保留中间位置的1，其他设为0
+        # Simple strategy: keep 1 at middle position, set others to 0
         if end > start:
             middle = (start + end) // 2
             for i in range(start, end + 1):
@@ -273,17 +273,17 @@ class LLMReassessmentAgent:
 
     def reassess_dialogue(self, utterances: List[str], prediction: List[int], num_threads: int = 8) -> Dict:
         """
-        重新评估单个对话的分割预测
+        Reassess segmentation prediction for a single dialogue
         
         Args:
-            utterances: 对话序列
-            prediction: 原始预测
-            num_threads: 线程数量，默认8
+            utterances: Dialogue sequence
+            prediction: Original prediction
+            num_threads: Number of threads, default 8
             
         Returns:
-            包含优化结果的字典
+            Dictionary containing optimization results
         """
-        # 检测连续1
+        # Detect consecutive 1s
         consecutive_ranges = self.detect_consecutive_ones(prediction)
 
         if not consecutive_ranges:
@@ -295,10 +295,10 @@ class LLMReassessmentAgent:
                 'num_changes': 0
             }
 
-        # 使用LLM重新评估
+        # Use LLM for reassessment
         optimized_prediction = self.reassess_consecutive_ones(utterances, prediction, consecutive_ranges, num_threads)
 
-        # 计算变化
+        # Calculate changes
         changes = sum(1 for orig, opt in zip(prediction, optimized_prediction) if orig != opt)
 
         return {
@@ -311,14 +311,14 @@ class LLMReassessmentAgent:
 
     def batch_reassess(self, dialogues: List[Dict], num_threads: int = 8) -> List[Dict]:
         """
-        批量重新评估多个对话
+        Batch reassess multiple dialogues
         
         Args:
-            dialogues: 对话列表，每个对话包含utterances和prediction
-            num_threads: 线程数量，默认8
+            dialogues: List of dialogues, each containing utterances and prediction
+            num_threads: Number of threads, default 8
             
         Returns:
-            重新评估后的对话列表
+            List of reassessed dialogues
         """
         results = []
 
@@ -330,10 +330,10 @@ class LLMReassessmentAgent:
                 results.append(dialogue)
                 continue
 
-            # 重新评估
+            # Reassess
             reassessment_result = self.reassess_dialogue(utterances, prediction, num_threads)
 
-            # 更新对话结果
+            # Update dialogue results
             updated_dialogue = dialogue.copy()
             updated_dialogue['original_prediction'] = reassessment_result['original_prediction']
             updated_dialogue['optimized_prediction'] = reassessment_result['optimized_prediction']
@@ -348,13 +348,13 @@ class LLMReassessmentAgent:
 
 def create_reassessment_agent(config_path: str = "config.yaml") -> LLMReassessmentAgent:
     """
-    从配置文件创建重新评估代理
+    Create reassessment agent from config file
     
     Args:
-        config_path: 配置文件路径
+        config_path: Path to config file
         
     Returns:
-        LLMReassessmentAgent实例
+        LLMReassessmentAgent instance
     """
     config = load_config(config_path)
     api_key = config["api_key"]["openrouter"]
@@ -364,12 +364,12 @@ def create_reassessment_agent(config_path: str = "config.yaml") -> LLMReassessme
     return LLMReassessmentAgent(api_key, base_url, model)
 
 
-# 示例使用
+# Example usage
 if __name__ == "__main__":
-    # 创建重新评估代理
+    # Create reassessment agent
     agent = create_reassessment_agent()
 
-    # 示例对话和预测
+    # Example dialogue and prediction
     utterances = [
         "Hello, how are you?",
         "I'm fine, thank you.",
@@ -379,19 +379,19 @@ if __name__ == "__main__":
         "That sounds great!"
     ]
 
-    # 包含连续1的预测
+    # Prediction containing consecutive 1s
     prediction = [0, 1, 1, 0, 1, 0]
 
-    print("原始预测:", prediction)
-    print("对话内容:")
+    print("Original prediction:", prediction)
+    print("Dialogue content:")
     for i, utt in enumerate(utterances):
         print(f"{i}: {utt}")
 
-    # 重新评估
+    # Reassess
     result = agent.reassess_dialogue(utterances, prediction)
 
-    print("\n重新评估结果:")
-    print("优化后预测:", result['optimized_prediction'])
-    print("连续1范围:", result['consecutive_ranges'])
-    print("是否发生变化:", result['changes_made'])
-    print("变化数量:", result['num_changes'])
+    print("\nReassessment results:")
+    print("Optimized prediction:", result['optimized_prediction'])
+    print("Consecutive 1 ranges:", result['consecutive_ranges'])
+    print("Changes made:", result['changes_made'])
+    print("Number of changes:", result['num_changes'])

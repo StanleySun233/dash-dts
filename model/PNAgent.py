@@ -113,7 +113,7 @@ class PNAgent:
                 response = self.llm.generate_response(formatted_prompt)
                 output_tokens = self._count_tokens(response)
 
-                # 验证响应格式
+                # Validate response format
                 parsed_response = self._validate_and_parse_response(response)
 
                 return {
@@ -142,10 +142,10 @@ class PNAgent:
 
     def _validate_and_parse_response(self, response):
         """
-        验证并解析LLM响应，确保格式正确
+        Validate and parse LLM response to ensure correct format
         """
         try:
-            # 尝试提取JSON部分
+            # Attempt to extract JSON part
             if '```json' in response:
                 json_start = response.find('```json') + 7
                 json_end = response.find('```', json_start)
@@ -162,7 +162,7 @@ class PNAgent:
 
             parsed = json.loads(json_str)
 
-            # 验证必需字段
+            # Validate required fields
             if 'result' not in parsed:
                 raise ValueError("Missing 'result' field")
 
@@ -170,17 +170,17 @@ class PNAgent:
             if 'positive' not in result or 'negative' not in result:
                 raise ValueError("Missing 'positive' or 'negative' field")
 
-            # 验证正样本结构
+            # Validate positive sample structure
             positive = result['positive']
             if not all(key in positive for key in ['previous', 'current', 'next', 'reason']):
                 raise ValueError("Positive sample missing required fields")
 
-            # 验证负样本结构
+            # Validate negative sample structure
             negative = result['negative']
             if not all(key in negative for key in ['previous', 'current', 'next', 'reason']):
                 raise ValueError("Negative sample missing required fields")
 
-            # 验证句子数量（每个样本应该有7个句子：3+1+3）
+            # Validate sentence count (each sample should have 7 sentences: 3+1+3)
             if len(positive['previous']) != 3 or len(positive['next']) != 3:
                 raise ValueError("Positive sample should have 3 previous and 3 next sentences")
 

@@ -37,10 +37,11 @@ def evaluate_segmentation(reference, hypothesis):
     precision = precision_score(ref_seq, hyp_seq, pos_label=1, zero_division=0)
     recall = recall_score(ref_seq, hyp_seq, pos_label=1, zero_division=0)
 
+    # Ensure all values are native Python float types (not Decimal, numpy types, etc.)
     return {
-        'PK': pk,
-        'WD': wd,
-        'Precision': precision,
-        'Recall': recall,
-        'F1': f1
+        'PK': float(pk),
+        'WD': float(wd),
+        'Precision': float(precision),
+        'Recall': float(recall),
+        'F1': float(f1)
     }

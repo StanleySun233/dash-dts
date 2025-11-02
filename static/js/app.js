@@ -1,4 +1,4 @@
-// 全局变量
+// Global variables
 let currentDialogue = null;
 let currentPrediction = null;
 let currentPredictionDetails = null;
@@ -6,14 +6,14 @@ let currentReassess = null;
 let currentReassessDetails = null;
 let currentReference = null;
 
-// DOM元素
+// DOM elements
 let dialogueList, dialogueTable, segmentBtn, reassessBtn;
 let pkValue, wdValue, f1Value;
 let errorModal;
 
-// 初始化
+// Initialize
 document.addEventListener('DOMContentLoaded', function() {
-    // 初始化DOM元素
+    // Initialize DOM elements
     dialogueList = document.getElementById('dialogue-list');
     dialogueTable = document.getElementById('dialogue-table');
     segmentBtn = document.getElementById('segment-btn');
@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', function() {
     wdValue = document.getElementById('wd-value');
     f1Value = document.getElementById('f1-value');
     
-    // 初始化模态框
+    // Initialize modal
     const errorModalElement = document.getElementById('errorModal');
     
     if (errorModalElement) {
@@ -33,13 +33,13 @@ document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
 });
 
-// 设置事件监听器
+// Set up event listeners
 function setupEventListeners() {
     segmentBtn.addEventListener('click', handleSegment);
     reassessBtn.addEventListener('click', handleReassess);
 }
 
-// 加载对话列表
+// Load dialogue list
 async function loadDialogues() {
     try {
         const response = await fetch('/api/dialogues');
@@ -55,7 +55,7 @@ async function loadDialogues() {
     }
 }
 
-// 渲染对话列表
+// Render dialogue list
 function renderDialogueList(dialogues) {
     dialogueList.innerHTML = '';
     
@@ -77,9 +77,9 @@ function renderDialogueList(dialogues) {
     });
 }
 
-// 选择对话
+// Select dialogue
 async function selectDialogue(dialId, element) {
-    // 更新选中状态
+    // Update selected state
     document.querySelectorAll('.dialogue-item').forEach(item => {
         item.classList.remove('active');
     });
@@ -91,7 +91,7 @@ async function selectDialogue(dialId, element) {
         const response = await fetch(`/api/dialogue/${dialId}`);
         const data = await response.json();
         
-        console.log('API Response:', data); // 调试信息
+        console.log('API Response:', data); // Debug info
         
         if (data.success) {
             currentDialogue = data;
@@ -101,15 +101,15 @@ async function selectDialogue(dialId, element) {
             currentReassess = null;
             currentReassessDetails = null;
             
-            console.log('Current dialogue loaded:', currentDialogue); // 调试信息
+            console.log('Current dialogue loaded:', currentDialogue); // Debug info
             
             renderDialogueTable();
             resetMetrics();
             reassessBtn.disabled = true;
             
-            console.log('About to hide loading modal'); // 调试信息
+            console.log('About to hide loading modal'); // Debug info
             hideLoading();
-            console.log('Loading modal hidden'); // 调试信息
+            console.log('Loading modal hidden'); // Debug info
         } else {
             hideLoading();
             showError('Failed to load dialogue: ' + data.error);
@@ -120,7 +120,7 @@ async function selectDialogue(dialId, element) {
     }
 }
 
-// 渲染对话表格
+// Render dialogue table
 function renderDialogueTable() {
     if (!currentDialogue) return;
     
@@ -167,11 +167,11 @@ function renderDialogueTable() {
         dialogueTable.appendChild(row);
     });
     
-    // 初始化tooltips
+    // Initializetooltips
     initializeTooltips();
 }
 
-// 获取状态指示器
+// Get status indicator
 function getStatusIndicator(index) {
     if (!currentPrediction || !currentReference) {
         return '<span class="status-indicator status-unknown"></span>Unknown';
@@ -185,7 +185,7 @@ function getStatusIndicator(index) {
     let className = 'status-unknown';
     
     if (reassess !== null) {
-        // 使用reassess结果
+        // Use reassess result
         if (reference === reassess) {
             status = 'Correct';
             className = 'status-correct';
@@ -194,7 +194,7 @@ function getStatusIndicator(index) {
             className = 'status-incorrect';
         }
     } else if (prediction !== null) {
-        // 使用预测结果
+        // Use prediction result
         if (reference === prediction) {
             status = 'Correct';
             className = 'status-correct';
@@ -207,7 +207,7 @@ function getStatusIndicator(index) {
     return `<span class="status-indicator ${className}"></span>${status}`;
 }
 
-// 处理分割按钮点击
+// Handle segment button click
 async function handleSegment() {
     if (!currentDialogue) {
         showError('Please select a dialogue first');
@@ -222,15 +222,15 @@ async function handleSegment() {
         showLoading('Performing dialogue segmentation...');
         segmentBtn.disabled = true;
         
-        // 并行执行各个API
+        // Execute APIs in parallel
         let handshakeResults = null;
         let fewShotExamples = null;
         let similarityExamples = null;
         
-        // 创建并行任务数组
+        // Create parallel tasks array
         const parallelTasks = [];
         
-        // 1. Handshake检测
+        // 1. Handshake detection
         if (enableHandshake) {
             parallelTasks.push({
                 name: 'handshake',
@@ -239,7 +239,7 @@ async function handleSegment() {
             });
         }
         
-        // 2. 正负样本生成
+        // 2. Positive/negative sample generation
         if (enableFewShot) {
             parallelTasks.push({
                 name: 'fewshot',
@@ -248,7 +248,7 @@ async function handleSegment() {
             });
         }
         
-        // 3. 相似样本生成
+        // 3. Similarity sample generation
         if (enableSimilarity) {
             parallelTasks.push({
                 name: 'similarity',
@@ -257,7 +257,7 @@ async function handleSegment() {
             });
         }
         
-        // 并行执行所有任务
+        // Execute all tasks in parallel
         if (parallelTasks.length > 0) {
             showLoading('Performing parallel preprocessing...');
             
@@ -273,7 +273,7 @@ async function handleSegment() {
                 })
             );
             
-            // 处理结果
+            // Process results
             results.forEach(({ value }) => {
                 if (value.success) {
                     switch (value.name) {
@@ -291,7 +291,7 @@ async function handleSegment() {
             });
         }
         
-        // 4. 执行DTS分割
+        // 4. Execute DTS segmentation
         showLoading('Performing dialogue topic segmentation...');
         const response = await fetch('/api/segment', {
             method: 'POST',
@@ -328,7 +328,7 @@ async function handleSegment() {
     }
 }
 
-// 处理重新评估按钮点击
+// Handle reassess button click
 async function handleReassess() {
     if (!currentDialogue || !currentPrediction) {
         showError('Please perform dialogue segmentation first');
@@ -358,7 +358,7 @@ async function handleReassess() {
             updateMetrics(data.metrics);
             renderDialogueTable();
             
-            // 显示变化信息
+            // Display change information
             if (data.changes_made) {
                 showInfo(`Reassessment completed, modified ${data.num_changes} prediction points`);
             } else {
@@ -378,21 +378,21 @@ async function handleReassess() {
     }
 }
 
-// 更新指标
+// Update metrics
 function updateMetrics(metrics) {
     pkValue.textContent = metrics.PK ? metrics.PK.toFixed(4) : '--';
     wdValue.textContent = metrics.WD ? metrics.WD.toFixed(4) : '--';
     f1Value.textContent = metrics.F1 ? metrics.F1.toFixed(4) : '--';
 }
 
-// 重置指标
+// Reset metrics
 function resetMetrics() {
     pkValue.textContent = '--';
     wdValue.textContent = '--';
     f1Value.textContent = '--';
 }
 
-// 显示加载状态（使用按钮文字变化）
+// Show loading state (using button text change)
 function showLoading(text) {
     if (segmentBtn) {
         segmentBtn.disabled = true;
@@ -401,7 +401,7 @@ function showLoading(text) {
     console.log('Loading:', text);
 }
 
-// 隐藏加载状态
+// Hide loading state
 function hideLoading() {
     if (segmentBtn) {
         segmentBtn.disabled = false;
@@ -410,15 +410,15 @@ function hideLoading() {
     console.log('Loading completed');
 }
 
-// 显示错误信息
+// Show error message
 function showError(message) {
     document.getElementById('error-message').textContent = message;
     errorModal.show();
 }
 
-// 显示信息提示
+// Show info message
 function showInfo(message) {
-    // 创建临时提示
+    // Create temporary alert
     const alert = document.createElement('div');
     alert.className = 'alert alert-info alert-dismissible fade show position-fixed';
     alert.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
@@ -429,7 +429,7 @@ function showInfo(message) {
     
     document.body.appendChild(alert);
     
-    // 3秒后自动移除
+    // Automatically remove after 3 seconds
     setTimeout(() => {
         if (alert.parentNode) {
             alert.parentNode.removeChild(alert);
@@ -437,9 +437,9 @@ function showInfo(message) {
     }, 3000);
 }
 
-// 初始化tooltips
+// Initialize tooltips
 function initializeTooltips() {
-    // 销毁现有的tooltips
+    // Destroy existing tooltips
     const existingTooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
     existingTooltips.forEach(element => {
         const tooltip = bootstrap.Tooltip.getInstance(element);
@@ -448,7 +448,7 @@ function initializeTooltips() {
         }
     });
     
-    // 初始化新的tooltips
+    // Initialize new tooltips
     const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.map(function (tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl, {
@@ -458,7 +458,7 @@ function initializeTooltips() {
     });
 }
 
-// 工具函数：防抖
+// Utility function: debounce
 function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -471,7 +471,7 @@ function debounce(func, wait) {
     };
 }
 
-// 工具函数：节流
+// Utility function: throttle
 function throttle(func, limit) {
     let inThrottle;
     return function() {
@@ -485,12 +485,12 @@ function throttle(func, limit) {
     };
 }
 
-// Handshake检测 - 异步并行执行，8线程
+// Handshake detection - asynchronous parallel execution, 8 threads
 async function performHandshakeDetection() {
     const utterances = currentDialogue.utterances;
     const results = new Array(utterances.length);
     
-    // 创建8个并发批次
+    // Create 8 concurrent batches
     const batchSize = Math.ceil(utterances.length / 8);
     const batches = [];
     
@@ -507,7 +507,7 @@ async function performHandshakeDetection() {
         batches.push(batch);
     }
     
-    // 并行执行所有批次
+    // Execute all batches in parallel
     const batchPromises = batches.map(async (batch) => {
         const batchResults = await Promise.all(
             batch.map(async ({ index, context }) => {
@@ -527,10 +527,10 @@ async function performHandshakeDetection() {
         return batchResults;
     });
     
-    // 等待所有批次完成
+    // Wait for all batches to complete
     const allBatchResults = await Promise.all(batchPromises);
     
-    // 按原始顺序重新排列结果
+    // Rearrange results in original order
     allBatchResults.flat().forEach(({ index, data }) => {
         results[index] = data;
     });
@@ -538,12 +538,12 @@ async function performHandshakeDetection() {
     return results;
 }
 
-// 正负样本生成 - 异步并行执行，8线程
+// Positive/negative sample generation - asynchronous parallel execution, 8 threads
 async function performFewShotGeneration() {
     const utterances = currentDialogue.utterances;
     const results = new Array(utterances.length);
     
-    // 创建8个并发批次
+    // Create 8 concurrent batches
     const batchSize = Math.ceil(utterances.length / 8);
     const batches = [];
     
@@ -554,7 +554,7 @@ async function performFewShotGeneration() {
         batches.push(batch);
     }
     
-    // 并行执行所有批次
+    // Execute all batches in parallel
     const batchPromises = batches.map(async (batch) => {
         const batchResults = await Promise.all(
             batch.map(async ({ index }) => {
@@ -574,10 +574,10 @@ async function performFewShotGeneration() {
         return batchResults;
     });
     
-    // 等待所有批次完成
+    // Wait for all batches to complete
     const allBatchResults = await Promise.all(batchPromises);
     
-    // 按原始顺序重新排列结果
+    // Rearrange results in original order
     allBatchResults.flat().forEach(({ index, result }) => {
         results[index] = result;
     });
@@ -585,7 +585,7 @@ async function performFewShotGeneration() {
     return results;
 }
 
-// 相似样本生成
+// Similarity sample generation
 async function performSimilarityGeneration() {
     try {
         const response = await fetch('/api/similarity', {
@@ -601,7 +601,7 @@ async function performSimilarityGeneration() {
     }
 }
 
-// 导出全局函数供调试使用
+// Export global functions for debugging
 window.appDebug = {
     currentDialogue,
     currentPrediction,
@@ -613,7 +613,7 @@ window.appDebug = {
     showLoading
 };
 
-// 调试函数
+// Debug function
 window.debugInfo = function() {
     console.log('Current dialogue:', currentDialogue);
     console.log('Current prediction:', currentPrediction);
