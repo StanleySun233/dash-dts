@@ -22,7 +22,7 @@
            - **Q-A patterns**: Each new question often introduces a new topic
            - Consider if removing boundary would merge semantically distinct topics
         4. If one position has strongest semantic break, select that one; if multiple positions have legitimate distinct shifts, retain multiple 1s
-        5. Output optimized prediction with clear reasoning
+        5. Output optimized prediction with clear reason (~100 words) that explains WHY the modification is made, including chain-of-thought evidence, and provide a confidence score
     </instructions>
 
     <input_data>
@@ -33,27 +33,41 @@
     </input_data>
 
     <output_format>
-        {"optimized_prediction":[0,1,0,0,1,0],"selected_position":2,"reasoning":"explanation","confidence":0.85}
-        **Note**: Multiple 1s may be retained if they represent distinct legitimate boundaries.
+        **CRITICAL**: You MUST output your response in a JSON code block using the following format:
+        
+        ```json
+        {"optimized_prediction":[0,1,0,0,1,0],"selected_position":2,"reason":"explanation (~100 words)","score":0.85}
+        ```
+        
+        **Required Fields:**
+        - **optimized_prediction**: Array of 0s and 1s with the same length as the current prediction
+        - **reason**: Must explain WHY the modification is made, include chain-of-thought evidence, approximately 100 words
+        - **score**: Confidence score (0.0-1.0) for the optimization decision
+        - **selected_position** (optional): The primary position selected if applicable
+        
+        **Note**: 
+        - Multiple 1s may be retained if they represent distinct legitimate boundaries.
+        - Output MUST be wrapped in ```json and ``` code block markers.
     </output_format>
 
     <examples>
         **Example 1:**
         Dialogue: ["Hello","How are you?","I'm fine","What's the weather?"]
         Current: [0,1,1,0] → Optimized: [0,0,1,0]
-        Reasoning: "Position 2 marks greeting-to-weather transition. Position 1 is redundant."
+        Reason: "Modification needed because positions 1 and 2 are both marked as boundaries but redundancy exists. Chain-of-thought evidence: 1) Position 1 between 'Hello' and 'How are you?' - both belong to greeting topic with no topic shift; 2) Position 2 between 'I'm fine' and 'What's the weather?' shows clear topic transition from greeting response to weather query (greeting→weather query); 3) Removing boundary at position 1 won't merge distinct topics since the greeting sequence is a continuous semantic unit. Therefore, retain position 2 and remove position 1 to ensure boundaries accurately reflect topic changes."
 
         **Example 2 (Multiple Boundaries):**
         Dialogue: ["Q1 about DMV","Answer","Q2 about sales","Answer","Q3 about timing","Answer"]
         Current: [0,1,1,1,1,0] → Optimized: [0,1,0,1,0,0]
-        Reasoning: "Q-A-Q-A pattern: each Q-A pair is distinct topic. Positions 1 and 3 are legitimate boundaries even with 2-utterance segments."
+        Reason: "Modification needed because current positions 2, 4, 6 are all marked as boundaries, but we need to identify true Q-A pair topic boundaries. Chain-of-thought evidence: 1) Position 1 between 'Q1 about DMV' and 'Answer' marks the start of first Q-A pair answer, but boundaries should be between Q-A pairs not within answers; 2) Position 3 between first answer and 'Q2 about sales' - Q2 introduces new topic (DMV→sales), making it a true topic boundary; 3) Position 5 between second answer and 'Q3 about timing' - Q3 introduces third topic (sales→timing), also a topic boundary. Therefore modify to: retain position 1 (Q-A pattern start), retain positions 3 and 5 (new questions introduce new topics), remove positions 2, 4, 6 (no boundaries should exist within answers)."
     </examples>
 
     <quality_requirements>
-        - **CRITICAL**: JSON format compliance
+        - **CRITICAL**: JSON format compliance - MUST output in ```json``` code block
         - **PRIMARY**: Semantic coherence analysis - prioritize semantic accuracy over strict rules
-        - **SCORES**: 0.9-1.0 (high), 0.7-0.8 (medium), 0.0-0.6 (weak/no break)
-        - **REASONING**: Clear explanation focusing on semantic topic shifts
+        - **SCORES**: 0.9-1.0 (high), 0.7-0.8 (medium), 0.0-0.6 (weak/no break), high score means high confidence to give the correct answer.
+        - **REASON**: Must explain WHY the modification is made (~100 words), include chain-of-thought evidence showing the analysis process and reasoning steps that lead to the optimization decision
+        - **SCORE**: Provide confidence score (0.0-1.0) for the optimization decision, where 0.9-1.0 (high), 0.7-0.8 (medium), 0.0-0.6 (weak/no break)
         - **FLEXIBILITY**: Accept small segments if semantically distinct; retain boundaries separating different Q-A pairs
     </quality_requirements>
 </system>

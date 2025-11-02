@@ -21,3 +21,5 @@ python evaluate.py --hs True --re True --ds True --pn True --dataset vhf --num_s
 ```bash
 python app.py
 ```
+
+![Demo](demo/demo.gif)

@@ -358,12 +358,19 @@ def run_reassess_by_id(dataset, reassessment_agent, dial_id, prediction):
 
     reassess_details = []
     optimized_prediction = result['optimized_prediction']
+    position_reason = result.get('position_reason', {})  # Get reason from LLM
+    position_score = result.get('position_score', {})    # Get score from LLM
+    
     for i, (original, optimized) in enumerate(zip(prediction, optimized_prediction)):
-        if original != optimized:
+        # Use LLM reason and score if available for this position, otherwise use fallback
+        if i in position_reason:
+            reason = position_reason[i]
+            score = position_score.get(i, 0.5)  # Use real score from LLM
+        elif original != optimized:
             reason = f"Reassessed from {original} to {optimized} based on context analysis"
             score = 0.8 if optimized == 1 else 0.2
         else:
-            reason = "No change needed"
+            reason = "No change needed - position was not in consecutive range requiring reassessment"
             score = 0.5
         reassess_details.append({
             "boundary": optimized,

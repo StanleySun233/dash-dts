@@ -15,9 +15,3 @@ base_url:
 window_size: 3
 num_threads: 32
 num_samples: 5
-
-enable_similarity_examples: true 
-
-enable_few_shot_examples: true 
-
-enable_handshake_results: true 

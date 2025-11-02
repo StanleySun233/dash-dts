@@ -88,10 +88,16 @@ class LLMReassessmentAgent:
                             'context_start': max(0, start - self.window_size),
                             'context_end': min(len(utterances), end + self.window_size + 1),
                             'optimized_segment': self._heuristic_optimization_segment(prediction, start, end),
+                            'reason': 'Heuristic fallback due to processing error',
+                            'score': 0.5,
                             'success': False
                         }
                     finally:
                         pbar.update(1)
+
+        # Collect reason and score information for each position
+        position_reason = {}  # Map position -> reason
+        position_score = {}   # Map position -> score
 
         # Apply results in order
         for idx in range(len(consecutive_ranges)):
@@ -100,28 +106,25 @@ class LLMReassessmentAgent:
                 context_start = result['context_start']
                 context_end = result['context_end']
                 optimized_segment = result['optimized_segment']
+                reason = result.get('reason', 'No reason provided')
+                score = result.get('score', 0.5)
 
-                # Update optimized prediction
+                # Update optimized prediction and store reason/score
+                start, end = consecutive_ranges[idx]
                 for i, val in enumerate(optimized_segment):
-                    if context_start + i < len(optimized_prediction):
-                        optimized_prediction[context_start + i] = val
+                    pos = context_start + i
+                    if pos < len(optimized_prediction):
+                        optimized_prediction[pos] = val
+                        # Store reason and score for all positions in the consecutive range
+                        # This explains why the reassessment was made for this range
+                        if start <= pos <= end:
+                            position_reason[pos] = reason
+                            position_score[pos] = score
 
-        return optimized_prediction
+        return optimized_prediction, position_reason, position_score
 
     def _process_single_consecutive_range(self, utterances: List[str], prediction: List[int],
                                           start: int, end: int) -> Dict:
-        """
-        Process a single consecutive 1 range
-        
-        Args:
-            utterances: Dialogue sequence
-            prediction: Original prediction
-            start: Start position of consecutive 1s
-            end: End position of consecutive 1s
-            
-        Returns:
-            Dictionary containing optimization results
-        """
         # Extract relevant dialogue segment
         context_start = max(0, start - self.window_size)
         context_end = min(len(utterances), end + self.window_size + 1)
@@ -138,30 +141,45 @@ class LLMReassessmentAgent:
             utterances[end + 1:min(len(utterances), end + 1 + self.window_size)]
         )
 
-        try:
+        # Retry up to 3 times
+        max_retries = 3
+        for attempt in range(max_retries):
             # Call LLM for reassessment
             response = self.llm_api.generate_response(prompt)
 
-            # Parse LLM response
-            optimized_segment = self._parse_llm_response(response, len(context_prediction))
+            # Parse LLM response - returns None on failure, may raise exception
+            parse_result = self._parse_llm_response(response, len(context_prediction))
+            
+            # Check if parsing was successful
+            if parse_result is not None:
+                optimized_segment = parse_result['prediction']
+                reason = parse_result.get('reason', 'No reason provided')
+                score = parse_result.get('score', 0.5)
 
-            return {
-                'context_start': context_start,
-                'context_end': context_end,
-                'optimized_segment': optimized_segment,
-                'success': True
-            }
-
-        except Exception as e:
-            print(f"Warning: LLM reassessment failed: {e}")
-            # If LLM call fails, use simple heuristic method
-            optimized_segment = self._heuristic_optimization_segment(prediction, start, end)
-            return {
-                'context_start': context_start,
-                'context_end': context_end,
-                'optimized_segment': optimized_segment,
-                'success': False
-            }
+                return {
+                    'context_start': context_start,
+                    'context_end': context_end,
+                    'optimized_segment': optimized_segment,
+                    'reason': reason,
+                    'score': score,
+                    'success': True
+                }
+            
+            # If this is not the last attempt, print warning and continue
+            if attempt < max_retries - 1:
+                print(f"Warning: LLM response parsing failed (attempt {attempt + 1}/{max_retries}), retrying...")
+        
+        # All retries failed, use heuristic fallback
+        print(f"Warning: LLM reassessment failed after {max_retries} attempts, using heuristic fallback")
+        optimized_segment = self._heuristic_optimization_segment(prediction, start, end)
+        return {
+            'context_start': context_start,
+            'context_end': context_end,
+            'optimized_segment': optimized_segment,
+            'reason': f'Heuristic fallback: Failed after {max_retries} attempts',
+            'score': 0.5,
+            'success': False
+        }
 
     def _heuristic_optimization_segment(self, prediction: List[int], start: int, end: int) -> List[int]:
         """
@@ -205,49 +223,67 @@ class LLMReassessmentAgent:
             next_context
         )
 
-    def _parse_llm_response(self, response: str, expected_length: int) -> List[int]:
-        """Parse LLM response to extract optimized prediction sequence"""
-        try:
-            # Attempt to parse JSON response
-            json_match = re.search(r'\{[^}]*"optimized_prediction"[^}]*\}', response, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(0)
-                result = json.loads(json_str)
-                if 'optimized_prediction' in result:
-                    prediction = result['optimized_prediction']
-                    if len(prediction) == expected_length:
-                        return prediction
-
-            # If JSON parsing fails, attempt to extract prediction sequence from response
-            # Look for patterns like [0, 1, 0, 0, 1, 0]
-            pattern = r'\[([0-9,\s]+)\]'
-            matches = re.findall(pattern, response)
-
-            if matches:
-                # Take the first matched sequence
-                prediction_str = matches[0]
-                prediction = [int(x.strip()) for x in prediction_str.split(',')]
-
-                # Ensure correct length
-                if len(prediction) == expected_length:
-                    return prediction
-
-            # If parsing fails, try other patterns
-            lines = response.split('\n')
-            for line in lines:
-                if 'optimized_prediction' in line or 'prediction' in line:
-                    # Find number sequence
-                    numbers = re.findall(r'\b[01]\b', line)
-                    if len(numbers) == expected_length:
-                        return [int(x) for x in numbers]
-
-            # If all fail, return all-zero sequence
-            print(f"Warning: Unable to parse LLM response, using default values")
-            return [0] * expected_length
-
-        except Exception as e:
-            print(f"Warning: Error parsing LLM response: {e}")
-            return [0] * expected_length
+    def _parse_llm_response(self, response: str, expected_length: int) -> Dict:
+        """Parse LLM response to extract optimized prediction sequence, reason, and score
+        Only extracts JSON from ```json``` code blocks
+        Returns None if parsing fails
+        """
+        # Extract JSON from ```json``` code block only
+        json_str = None
+        
+        if '```json' in response:
+            json_start = response.find('```json') + 7
+            json_end = response.find('```', json_start)
+            if json_end != -1:
+                json_str = response[json_start:json_end].strip()
+        
+        # If no ```json block found, try regular ``` block
+        if json_str is None and '```' in response:
+            # Find first ``` block
+            code_start = response.find('```') + 3
+            code_end = response.find('```', code_start)
+            if code_end != -1:
+                json_str = response[code_start:code_end].strip()
+        
+        # If no code block found, return None
+        if json_str is None:
+            print(f"Warning: No JSON code block found in response")
+            return None
+        
+        # Parse JSON - if parsing fails, return None
+        result = json.loads(json_str)
+        
+        # Validate required fields
+        if 'optimized_prediction' not in result:
+            print(f"Warning: Missing 'optimized_prediction' field in JSON")
+            return None
+        
+        prediction = result['optimized_prediction']
+        if not isinstance(prediction, list):
+            print(f"Warning: 'optimized_prediction' is not a list")
+            return None
+        
+        if len(prediction) != expected_length:
+            print(f"Warning: Prediction length {len(prediction)} != expected length {expected_length}")
+            return None
+        
+        # Extract reason
+        reason = result.get('reason', result.get('reasoning', 'No reason provided'))
+        if not isinstance(reason, str):
+            reason = str(reason)
+        
+        # Extract score
+        score = result.get('score', result.get('confidence', 0.5))
+        if not isinstance(score, (int, float)):
+            score = float(score)
+        # Clamp score to [0, 1]
+        score = max(0.0, min(1.0, float(score)))
+        
+        return {
+            'prediction': prediction,
+            'reason': reason,
+            'score': score
+        }
 
     def _heuristic_optimization(self, prediction: List[int], start: int, end: int) -> List[int]:
         """
@@ -292,11 +328,13 @@ class LLMReassessmentAgent:
                 'optimized_prediction': prediction.copy(),
                 'consecutive_ranges': [],
                 'changes_made': False,
-                'num_changes': 0
+                'num_changes': 0,
+                'position_reason': {},  # Empty reason map
+                'position_score': {}    # Empty score map
             }
 
         # Use LLM for reassessment
-        optimized_prediction = self.reassess_consecutive_ones(utterances, prediction, consecutive_ranges, num_threads)
+        optimized_prediction, position_reason, position_score = self.reassess_consecutive_ones(utterances, prediction, consecutive_ranges, num_threads)
 
         # Calculate changes
         changes = sum(1 for orig, opt in zip(prediction, optimized_prediction) if orig != opt)
@@ -306,7 +344,9 @@ class LLMReassessmentAgent:
             'optimized_prediction': optimized_prediction,
             'consecutive_ranges': consecutive_ranges,
             'changes_made': changes > 0,
-            'num_changes': changes
+            'num_changes': changes,
+            'position_reason': position_reason,  # Map of position -> reason
+            'position_score': position_score     # Map of position -> score
         }
 
     def batch_reassess(self, dialogues: List[Dict], num_threads: int = 8) -> List[Dict]:
