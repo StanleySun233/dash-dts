@@ -11,3 +11,13 @@ pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https
 pip install -r requirements.txt
 
 ```
+
+3. eval and ablation
+```bash
+python evaluate.py --hs True --re True --ds True --pn True --dataset vhf --num_samples 100
+```
+
+4. demo
+```bash
+python app.py
+```
